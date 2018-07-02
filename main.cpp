@@ -54,11 +54,6 @@ public:
         }
     }
 
-    bool isEndNode(const State& node) {
-        return node.row == columns_ - 1 &&
-            node.column == rows_ - 1;
-    }
-
 private:
     int** food_;
 
