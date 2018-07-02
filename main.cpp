@@ -7,6 +7,8 @@
 #include <queue>
 #include <unordered_set>
 #include <sstream>
+#include <iterator>
+
 using namespace std;
 
 template <typename T>
@@ -19,172 +21,115 @@ T** create2DArray(int width, int height) {
     return res;
 }
 
-struct Node {
-    int x;
-    int y;
+struct State {
+    int row;
+    int column;
     int food;
 };
-class FoodComparator {
-public:
-    bool operator()(const Node& left, const Node& right) {
-        return left.food < right.food;
-    }
-};
-namespace std {
-    template <>
-    struct hash<Node*> {
-        size_t operator() (Node* const& node) const {
-            return 13 + std::hash<int>()(node->x) + 71 +
-                   std::hash<int>()(node->y) + 131 +
-                   std::hash<int>()(node->food);
-        }
-    };
-}
 
 class World {
 public:
-    const int width_;
-    const int height_;
+    const int rows_;
+    const int columns_;
 
-    World(int width, int height) : width_(width), height_(height),
-        food_(create2DArray<int>(width, height)) {}
+    World(int rows, int columns) : rows_(rows), columns_(columns),
+        food_(create2DArray<int>(rows, columns)) {}
 
-    int foodAt(int x, int y) {
-        return food_[x][y];
+    int foodAt(int row, int col) {
+        return food_[row][col];
     }
 
-    int setFoodAt(int x, int y, int food) {
-        food_[x][y] = food;
+    int setFoodAt(int row, int col, int food) {
+        food_[row][col] = food;
     }
 
-    void getNeighbours(const Node& center, Node* neighbours, int& count) {
-        assert(! isEndNode(center));
+    void getNeighbours(const State& center, State* neighbours, int& count) {
         count = 0;
 
-        if (center.x < width_ - 1) {
-            assignRightNode(neighbours[count++], center);
-        }
-        if(center.y < height_ - 1) {
+        if(center.row < rows_ - 1) {
             assignBottomNode(neighbours[count++], center);
         }
+        if (center.column < columns_ - 1) {
+            assignRightNode(neighbours[count++], center);
+        }
     }
 
-    void assignRightNode(Node& right_node, const Node& node) {
-        assert(node.x + 1 < width_);
-
-        right_node.x = node.x + 1;
-        right_node.y = node.y;
-        right_node.food = node.food + foodAt(node.x + 1, node.y);
-    }
-
-    void assignBottomNode(Node& bottom_node, const Node& node) {
-        assert(node.y + 1 < height_);
-
-        bottom_node.x = node.x;
-        bottom_node.y = node.y + 1;
-        bottom_node.food = node.food + foodAt(node.x, node.y + 1);
-    }
-
-    bool isEndNode(const Node& node) {
-        return node.x == width_ - 1 &&
-            node.y == height_ - 1;
+    bool isEndNode(const State& node) {
+        return node.row == columns_ - 1 &&
+            node.column == rows_ - 1;
     }
 
 private:
     int** food_;
-};
-class Visitor {
-public:
-//    const width_;
-//    const height_;
 
-//    Visitor(const int width, const int height)
-//        : width_(width), height_(height),
-//        visited_(create2DArray<bool>(width, height)) {
-//        for (int i = 0; i < width; ++i) {
-//            for (int j = 0; j < height; ++j) {
-//                visited_[i][j] = false;
-//            }
-//        }
-//    }
+    void assignBottomNode(State& bottom_node, const State& node) {
+        assert(node.row + 1 < rows_);
 
-    bool isVisited(Node& node) {
-//        return visited_[node.x][node.y];
-        return visited_.count(&node) != 0;
+        bottom_node.row = node.row + 1;
+        bottom_node.column = node.column;
+        bottom_node.food = node.food + foodAt(bottom_node.row, bottom_node.column);
     }
 
-    void visit(Node& node) {
-//        visited_[node.x][node.y] = true;
-        visited_.insert(&node);
-    }
+    void assignRightNode(State& right_node, const State& node) {
+        assert(node.column + 1 < columns_);
 
-private:
-//    bool** visited_;
-    unordered_set<Node*> visited_;
+        right_node.row = node.row;
+        right_node.column = node.column + 1;
+        right_node.food = node.food + foodAt(right_node.row, right_node.column);
+    }
 };
 
 int main()
 {
-//    stringstream cin;
-//    cin << "3 3\n"
-//           "1 2 3\n"
-//           "4 5 6\n"
-//           "7 8 9\n";
+    //region input
+    int columns, rows;
+    cin >> columns >> rows; cin.ignore();
 
-    int W, H;
-    cin >> W >> H; cin.ignore();
-    cerr << "W: " << W << "\nH: " << H;
-    
-    World world(W, H);
-    for (int y = 0; y < H; y++) {
-        for (int x = 0; x < W; x++) {
+    World world(rows, columns);
+    for (int i = 0; i < rows; i++) {
+        for (int j = 0; j < columns; j++) {
             int food; cin >> food; cin.ignore();
-            world.setFoodAt(x, y, food);
+            world.setFoodAt(i, j, food);
         }
     }
 
-//    for (int y = 0; y < H; ++y) {
-//        for (int x = 0; x < W; ++x) {
-//            cerr << world.foodAt(x, y) << " ";
-//        }
-//        cerr << "\n";
-//    }
+    // for each coordinate , holds the max amount of food we had when we encountered previously,
+    // or -1 if we haven't been at that coordinates yet
+    vector<vector<int>> prev_states_food(rows, vector<int>(columns, -1));
+    queue<State> states;
 
-    Visitor visitor;
-    priority_queue<Node, vector<Node>, FoodComparator> moves;
-
-    auto* adjacent = new Node[2];
+    auto* adjacent = new State[2];
     for (int j = 0; j < 2; ++j) {
-        adjacent[j].x = adjacent[j].y = adjacent[j].food = -1;
+        adjacent[j].row = adjacent[j].column = adjacent[j].food = -1;
     }
     int adj_count = -1;
 
-    moves.push({0, 0, world.foodAt(0, 0)});
+    states.push({0, 0, world.foodAt(0, 0)});
 
-    int max_food_eaten = 0;
-    while (! moves.empty()) {
-        Node next = moves.top();
-        moves.pop();
+    int additions = 1;
+    int poppings = 0;
 
-        if(world.isEndNode(next)) {
-             if(max_food_eaten < next.food) {
-                 max_food_eaten = next.food;
-             }
-             visitor.visit(next);
-            continue;
-        }
+    while (! states.empty()) {
+        State next = states.front();
+        states.pop();
+        poppings++;
 
         world.getNeighbours(next, adjacent, adj_count);
 
         for (int i = 0; i < adj_count; ++i) {
-            auto& adj = adjacent[i];
-            if (! visitor.isVisited(adj) ) {
-                moves.push(adj);
+            auto& alt = adjacent[i];
+            int prev_state_food =
+                prev_states_food.at(alt.row).at(alt.column);
+            // add only if there isn't a state we discovered previously with better score
+            if (alt.food > prev_state_food) {
+                prev_states_food.at(alt.row).at(alt.column) = alt.food;
+                states.push(alt);
+                additions++;
             }
         }
-
-        visitor.visit(next);
     }
 
-    cout << max_food_eaten << endl;
+    cerr << "additions: " << additions << "\n";
+    cerr << "poppings: " << poppings << "\n";
+    cout << prev_states_food.at(rows - 1).at(columns - 1) << endl;
 }
